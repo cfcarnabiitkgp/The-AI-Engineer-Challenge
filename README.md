@@ -6,6 +6,9 @@
 
 ## <h1 align="center" id="heading"> 🍳 AI Recipe Generator Challenge</h1>
 
+### 🌐 **Live Demo**
+**[🍳 Try the Recipe Generator Now!](https://the-ai-engineer-challenge-nd351lvz3.vercel.app)**
+
 ## 🤖 Your First Vibe Coding LLM Application
 
 > If you are a novice, and need a bit more help to get your dev environment off the ground, check out this [Setup Guide](docs/GIT_SETUP.md). This guide will walk you through the 'git' setup you need to get started.
@@ -56,7 +59,8 @@ A sophisticated recipe generator that:
    npm run dev
    ```
 
-4. **Visit the app:** http://localhost:3000
+4. **Visit the app:** 
+   - **Live demo:** [https://the-ai-engineer-challenge-nd351lvz3.vercel.app](https://the-ai-engineer-challenge-nd351lvz3.vercel.app)
 
 ## 🏗️ **Project Structure**
 
@@ -147,7 +151,7 @@ Post on LinkedIn with this template:
 - Secure API key handling
 
 Check it out 👇
-[LINK TO APP]
+[https://the-ai-engineer-challenge-nd351lvz3.vercel.app](https://the-ai-engineer-challenge-nd351lvz3.vercel.app)
 
 A big shoutout to @AI Makerspace for making this possible! 🤗🙏
 

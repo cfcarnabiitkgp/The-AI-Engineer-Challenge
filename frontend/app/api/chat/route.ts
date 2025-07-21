@@ -4,9 +4,10 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     
-    // Get the backend URL from environment variable or default to localhost
+    // Get backend URL from environment variable, default to localhost
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000'
     
+    // Forward the request to the FastAPI backend
     const response = await fetch(`${backendUrl}/api/chat`, {
       method: 'POST',
       headers: {
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error in chat API route:', error)
     return NextResponse.json(
-      { error: 'Failed to connect to recipe generation service' },
+      { error: 'Failed to connect to backend' },
       { status: 500 }
     )
   }

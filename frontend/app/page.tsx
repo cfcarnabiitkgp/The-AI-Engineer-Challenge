@@ -336,6 +336,7 @@ Tips:
 IMPORTANT: The total cooking time must be ${form.cookingTime} or less. Break down the time between prep and cooking steps accordingly. Make it easy to follow and ensure it's delicious!`
 
     try {
+      // Call the backend directly - it's deployed as a serverless function
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {

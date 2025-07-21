@@ -123,4 +123,4 @@ The backend generates recipes with the following enhanced features:
 
 ---
 
-**Secure and ready for production! 🔒** 
+**Secure and ready for production! 🔒**

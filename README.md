@@ -119,18 +119,6 @@ The-AI-Engineer-Challenge/
 - **Styling:** Tailwind CSS
 - **API Proxy:** `/api/chat` route for backend communication
 
-## 🚀 **Deployment**
-
-### Vercel Deployment
-1. **Connect your repository** to Vercel
-2. **Set environment variables** in Vercel dashboard:
-   - `BACKEND_URL`: Your FastAPI backend URL
-3. **Deploy automatically** on push to main branch
-
-### Backend Deployment
-- Deploy the FastAPI backend to your preferred hosting service
-- Update the `BACKEND_URL` environment variable in Vercel
-
 ## 🎉 **Congratulations!**
 
 You've built a sophisticated LLM-powered recipe generator! 🚀

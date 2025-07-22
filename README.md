@@ -139,7 +139,7 @@ Post on LinkedIn with this template:
 - Secure API key handling
 
 Check it out 👇
-[[https://the-ai-engineer-challenge-nd351lvz3.vercel.app](https://the-ai-engineer-challenge-nd351lvz3.vercel.app)](https://arnab-ai-challenge-proble-arnab-bhattacharyas-projects-5392f441.vercel.app)
+**[https://arnab-ai-challenge-proble-arnab-bhattacharyas-projects-5392f441.vercel.app/](https://arnab-ai-challenge-proble-arnab-bhattacharyas-projects-5392f441.vercel.app/)**
 
 A big shoutout to @AI Makerspace for making this possible! 🤗🙏
 

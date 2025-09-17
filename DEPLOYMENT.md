@@ -1,70 +1,105 @@
 # 🚀 Deployment Guide
 
-## Current Issue
-The Vercel app is only deploying the frontend. The FastAPI backend needs to be deployed separately.
+## ✅ Current Status: FULLY DEPLOYED!
 
-## 🔧 Quick Fix Options
+The application is now **successfully deployed** to Vercel with both frontend and backend working together! 🎉
 
-### Option 1: Deploy Backend to Railway (Recommended)
+### 🌐 **Live Application**
+**[https://arnab-ai-challenge-problem-5yjywderw.vercel.app/](https://arnab-ai-challenge-problem-5yjywderw.vercel.app/)**
 
-1. **Go to [Railway](https://railway.app/)**
-2. **Create a new project**
-3. **Connect your GitHub repository**
-4. **Deploy the `/api` folder:**
-   - Set the source directory to `/api`
-   - Railway will automatically detect it as a Python app
-5. **Add environment variable:**
-   - `OPENAI_API_KEY`: Your OpenAI API key
-6. **Get the deployment URL** (e.g., `https://your-app.railway.app`)
-7. **Update Vercel environment variables:**
-   - Go to your Vercel dashboard
-   - Add `BACKEND_URL` = `https://your-app.railway.app`
+## 🏗️ **Current Architecture**
 
-### Option 2: Deploy Backend to Render
+The app uses a **monorepo deployment** on Vercel:
+- **Frontend**: Next.js deployed as static site
+- **Backend**: FastAPI deployed as serverless functions
+- **File Storage**: Uses `/tmp` directory for PDF processing
+- **Dependencies**: All Python packages included in `api/requirements.txt`
 
-1. **Go to [Render](https://render.com/)**
-2. **Create a new Web Service**
-3. **Connect your GitHub repository**
-4. **Configure the service:**
-   - **Build Command:** `pip install -r requirements.txt`
-   - **Start Command:** `uvicorn app:app --host 0.0.0.0 --port $PORT`
-   - **Root Directory:** `api`
-5. **Add environment variable:**
-   - `OPENAI_API_KEY`: Your OpenAI API key
-6. **Deploy and get the URL**
-7. **Update Vercel environment variables** with the new backend URL
+## 🔧 **Deployment Configuration**
 
-### Option 3: Deploy Backend to Vercel (Advanced)
+### Vercel Configuration (`vercel.json`)
+```json
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/next"
+    },
+    {
+      "src": "api/app.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/app.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/frontend/$1"
+    }
+  ]
+}
+```
 
-1. **Create a separate Vercel project for the backend**
-2. **Deploy the `/api` folder to Vercel**
-3. **Set environment variables in Vercel:**
-   - `OPENAI_API_KEY`: Your OpenAI API key
-4. **Update the frontend's `BACKEND_URL`** to point to the new backend URL
+### Environment Variables Required
+- `OPENAI_API_KEY`: Your OpenAI API key (set in Vercel dashboard)
 
-## 🔍 Testing the Fix
+## 🧪 **Testing the Deployment**
 
-After deploying the backend:
+### Backend Health Check
+```bash
+curl https://arnab-ai-challenge-problem-5yjywderw.vercel.app/api/health
+# Expected: {"status":"ok"}
+```
 
-1. **Test the backend directly:**
-   ```bash
-   curl https://your-backend-url.railway.app/api/health
-   ```
+### Recipe Generation Test
+```bash
+curl -X POST "https://arnab-ai-challenge-problem-5yjywderw.vercel.app/api/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"developer_message": "Generate a recipe", "user_message": "Ingredients: chicken, rice, vegetables\nServings: 4 people\nCooking Time: 30 minutes", "model": "gpt-4.1-mini"}'
+```
 
-2. **Update the frontend's backend URL** in Vercel environment variables
+### PDF Chat Test
+```bash
+curl -X POST "https://arnab-ai-challenge-problem-5yjywderw.vercel.app/api/rag-chat" \
+  -H "Content-Type: application/json" \
+  -d '{"user_message": "What ingredients are available?"}'
+```
 
-3. **Test the full app** at your Vercel URL
+## 🎯 **Working Features**
 
-## 🎯 Expected Result
+- ✅ **Frontend**: Beautiful Next.js UI loads correctly
+- ✅ **Backend**: FastAPI serverless functions respond
+- ✅ **Recipe Generation**: AI-powered recipe creation with streaming
+- ✅ **PDF Upload**: Upload and process PDF documents
+- ✅ **RAG Chat**: Chat with uploaded PDFs using retrieval-augmented generation
+- ✅ **Time Constraints**: Strict cooking time enforcement
+- ✅ **Nutrition Facts**: Estimated nutritional information
+- ✅ **Multiple Cuisines**: 8 different cuisine types
+- ✅ **Dietary Restrictions**: 8 different dietary options
 
-Once the backend is deployed and connected:
-- ✅ Recipe generation will work
-- ✅ Real-time streaming will function
-- ✅ All features will be available
+## 🚀 **How to Deploy Your Own Version**
 
-## 📞 Need Help?
+1. **Fork the repository** on GitHub
+2. **Connect to Vercel**:
+   - Go to [Vercel Dashboard](https://vercel.com/dashboard)
+   - Click "New Project"
+   - Import your forked repository
+3. **Set Environment Variables**:
+   - Add `OPENAI_API_KEY` in Vercel dashboard
+4. **Deploy**: Vercel will automatically build and deploy both frontend and backend
 
-If you need assistance with deployment, check:
-- [Railway Documentation](https://docs.railway.app/)
-- [Render Documentation](https://render.com/docs)
-- [Vercel Documentation](https://vercel.com/docs) 
+## 📞 **Need Help?**
+
+If you encounter issues:
+- Check [Vercel Function Logs](https://vercel.com/dashboard) for backend errors
+- Verify environment variables are set correctly
+- Test backend endpoints directly using curl commands above
+- Check [Vercel Documentation](https://vercel.com/docs) for troubleshooting
+
+---
+
+**🎉 Congratulations! Your AI Recipe Generator is live and working!** 

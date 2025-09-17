@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 interface RecipeForm {
   ingredients: string[]
@@ -35,6 +35,39 @@ interface EnhancedRecipe {
   }
 }
 
+interface PDFFile {
+  filename: string
+  status: 'uploaded' | 'processed'
+  size: number
+}
+
+interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: Date
+}
+
+// Utility function to format chat content
+const formatChatContent = (content: string): string => {
+  return content
+    // Remove markdown headers (# ## ###)
+    .replace(/^#{1,6}\s+/gm, '')
+    // Convert **bold** to bold (we'll handle this with CSS)
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    // Convert *italic* to italic
+    .replace(/\*(.*?)\*/g, '$1')
+    // Convert bullet points to cleaner format
+    .replace(/^[\s]*[-*+]\s+/gm, '• ')
+    // Convert numbered lists to cleaner format
+    .replace(/^[\s]*\d+\.\s+/gm, (match, offset, string) => {
+      const num = match.trim().replace('.', '')
+      return `${num}. `
+    })
+    // Clean up extra whitespace
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 const dietaryOptions = [
   'Vegetarian', 'Vegan', 'Gluten-Free', 'Dairy-Free',
   'Keto', 'Paleo', 'Low-Carb', 'Nut-Free'
@@ -57,6 +90,16 @@ export default function Home() {
   const [recipe, setRecipe] = useState('')
   const [enhancedRecipe, setEnhancedRecipe] = useState<EnhancedRecipe | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
+  
+  // PDF and RAG functionality state
+  const [activeTab, setActiveTab] = useState<'recipe' | 'pdf'>('recipe')
+  const [uploadedPDFs, setUploadedPDFs] = useState<PDFFile[]>([])
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadMessage, setUploadMessage] = useState('')
+  const [ragMessages, setRagMessages] = useState<ChatMessage[]>([])
+  const [ragInput, setRagInput] = useState('')
+  const [isRagGenerating, setIsRagGenerating] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const addIngredient = () => {
     if (newIngredient.trim() && !form.ingredients.includes(newIngredient.trim())) {
@@ -298,6 +341,141 @@ export default function Home() {
     }
   }
 
+  // PDF and RAG functionality
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setIsUploading(true)
+    setUploadMessage('')
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await fetch('/api/upload-pdf', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        setUploadMessage(`✅ ${result.message}`)
+        await loadPDFs() // Refresh the PDF list
+      } else {
+        setUploadMessage(`❌ ${result.error}`)
+      }
+    } catch (error) {
+      console.error('Upload error:', error)
+      setUploadMessage('❌ Upload failed. Please try again.')
+    } finally {
+      setIsUploading(false)
+      // Clear the file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
+  const loadPDFs = async () => {
+    try {
+      const response = await fetch('/api/pdfs')
+      const result = await response.json()
+      
+      if (response.ok) {
+        setUploadedPDFs(result.pdfs || [])
+      }
+    } catch (error) {
+      console.error('Error loading PDFs:', error)
+    }
+  }
+
+  const sendRAGMessage = async () => {
+    if (!ragInput.trim() || isRagGenerating) return
+
+    const userMessage: ChatMessage = {
+      role: 'user',
+      content: ragInput.trim(),
+      timestamp: new Date()
+    }
+
+    setRagMessages(prev => [...prev, userMessage])
+    setRagInput('')
+    setIsRagGenerating(true)
+
+    try {
+      const response = await fetch('/api/rag-chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_message: userMessage.content,
+          model: 'gpt-4o-mini'
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('RAG chat failed')
+      }
+
+      const reader = response.body?.getReader()
+      if (!reader) throw new Error('No response body')
+
+      const decoder = new TextDecoder()
+      let assistantMessage = ''
+
+      const assistantMessageObj: ChatMessage = {
+        role: 'assistant',
+        content: '',
+        timestamp: new Date()
+      }
+
+      setRagMessages(prev => [...prev, assistantMessageObj])
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value)
+        assistantMessage += chunk
+        
+        // Update the last message (assistant's response)
+        setRagMessages(prev => {
+          const updated = [...prev]
+          updated[updated.length - 1] = {
+            ...updated[updated.length - 1],
+            content: assistantMessage
+          }
+          return updated
+        })
+      }
+    } catch (error) {
+      console.error('RAG chat error:', error)
+      setRagMessages(prev => [...prev, {
+        role: 'assistant',
+        content: 'Sorry, there was an error processing your question. Please try again.',
+        timestamp: new Date()
+      }])
+    } finally {
+      setIsRagGenerating(false)
+    }
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  // Load PDFs on component mount
+  useEffect(() => {
+    loadPDFs()
+  }, [])
+
   const generateRecipe = async () => {
     if (form.ingredients.length === 0) {
       alert('Please add at least one ingredient')
@@ -381,12 +559,40 @@ IMPORTANT: The total cooking time must be ${form.cookingTime} or less. Break dow
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4">
+      <div className="max-w-6xl mx-auto px-4">
         <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">
-          🍳 Recipe Generator
+          Recipe Generator
         </h1>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Tab Navigation */}
+        <div className="flex justify-center mb-8">
+          <div className="bg-white rounded-lg shadow-md p-1">
+            <button
+              onClick={() => setActiveTab('recipe')}
+              className={`px-6 py-3 rounded-md font-medium transition-colors ${
+                activeTab === 'recipe'
+                  ? 'bg-primary-500 text-white'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              🍳 Recipe Generator
+            </button>
+            <button
+              onClick={() => setActiveTab('pdf')}
+              className={`px-6 py-3 rounded-md font-medium transition-colors ${
+                activeTab === 'pdf'
+                  ? 'bg-primary-500 text-white'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              📄 PDF Chat
+            </button>
+          </div>
+        </div>
+
+        {/* Recipe Generator Tab */}
+        {activeTab === 'recipe' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Recipe Parameters Section */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-semibold text-gray-800 mb-6 flex items-center">
@@ -698,7 +904,210 @@ IMPORTANT: The total cooking time must be ${form.cookingTime} or less. Break dow
               </div>
             )}
           </div>
-        </div>
+          </div>
+        )}
+
+        {/* PDF Chat Tab */}
+        {activeTab === 'pdf' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* PDF Upload Section */}
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <h2 className="text-xl font-semibold text-gray-800 mb-6 flex items-center">
+                <span className="text-primary-500 mr-2">📄</span>
+                Upload PDF Documents
+              </h2>
+
+              {/* File Upload */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select PDF File
+                </label>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary-400 transition-colors">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                    disabled={isUploading}
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="text-primary-600 hover:text-primary-800 font-medium disabled:opacity-50"
+                  >
+                    {isUploading ? 'Uploading...' : 'Click to upload PDF'}
+                  </button>
+                  <p className="text-gray-500 text-sm mt-2">
+                    Supports cooking recipes, ingredient lists, and food guides
+                  </p>
+                </div>
+              </div>
+
+              {/* Upload Status */}
+              {uploadMessage && (
+                <div className={`p-3 rounded-md text-sm ${
+                  uploadMessage.includes('✅') 
+                    ? 'bg-green-100 text-green-800' 
+                    : 'bg-red-100 text-red-800'
+                }`}>
+                  {uploadMessage}
+                </div>
+              )}
+
+              {/* Uploaded PDFs List */}
+              <div className="mt-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">
+                  Uploaded Documents
+                </h3>
+                {uploadedPDFs.length === 0 ? (
+                  <p className="text-gray-500 text-sm">No PDFs uploaded yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {uploadedPDFs.map((pdf, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
+                        <div className="flex items-center">
+                          <span className="text-primary-500 mr-2">📄</span>
+                          <div>
+                            <p className="font-medium text-gray-800">{pdf.filename}</p>
+                            <p className="text-sm text-gray-500">
+                              {formatFileSize(pdf.size)} • {pdf.status}
+                            </p>
+                          </div>
+                        </div>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          pdf.status === 'processed' 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {pdf.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* RAG Chat Section */}
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <h2 className="text-xl font-semibold text-gray-800 mb-6 flex items-center">
+                <span className="text-primary-500 mr-2">💬</span>
+                Chat with Your PDFs
+              </h2>
+
+              {/* Chat Messages */}
+              <div className="h-96 overflow-y-auto border border-gray-200 rounded-lg p-4 mb-4 bg-gray-50">
+                {ragMessages.length === 0 ? (
+                  <div className="text-center text-gray-500 py-8">
+                    <div className="text-4xl mb-4">💬</div>
+                    <p>Ask questions about your uploaded PDFs!</p>
+                    <p className="text-sm mt-2">The AI will only answer using information from your documents.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {ragMessages.map((message, index) => (
+                      <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-xs lg:max-w-md px-4 py-3 rounded-lg ${
+                          message.role === 'user'
+                            ? 'bg-primary-500 text-white'
+                            : 'bg-white border border-gray-200 text-gray-800 shadow-sm'
+                        }`}>
+                          <div className="text-sm whitespace-pre-wrap leading-relaxed">
+                            {formatChatContent(message.content).split('\n').map((line, lineIndex) => {
+                              // Handle different line types for better formatting
+                              if (line.startsWith('• ')) {
+                                return (
+                                  <div key={lineIndex} className="flex items-start mb-1">
+                                    <span className="text-primary-500 mr-2 mt-0.5">•</span>
+                                    <span className="flex-1">{line.substring(2)}</span>
+                                  </div>
+                                )
+                              } else if (/^\d+\.\s/.test(line)) {
+                                return (
+                                  <div key={lineIndex} className="flex items-start mb-1">
+                                    <span className="text-primary-500 mr-2 mt-0.5 font-medium">
+                                      {line.match(/^\d+/)?.[0]}.
+                                    </span>
+                                    <span className="flex-1">{line.replace(/^\d+\.\s/, '')}</span>
+                                  </div>
+                                )
+                              } else if (line.trim() === '') {
+                                return <div key={lineIndex} className="h-2" />
+                              } else {
+                                return (
+                                  <div key={lineIndex} className="mb-1">
+                                    {line}
+                                  </div>
+                                )
+                              }
+                            })}
+                          </div>
+                          <p className={`text-xs mt-1 ${
+                            message.role === 'user' ? 'text-primary-100' : 'text-gray-500'
+                          }`}>
+                            {message.timestamp.toLocaleTimeString()}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                    {isRagGenerating && (
+                      <div className="flex justify-start">
+                        <div className="bg-white border border-gray-200 text-gray-800 px-4 py-2 rounded-lg">
+                          <div className="flex items-center">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-500 mr-2"></div>
+                            Thinking...
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Chat Input */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={ragInput}
+                  onChange={(e) => setRagInput(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && sendRAGMessage()}
+                  placeholder="Ask a question about your PDFs..."
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  disabled={isRagGenerating}
+                />
+                <button
+                  onClick={sendRAGMessage}
+                  disabled={!ragInput.trim() || isRagGenerating}
+                  className="px-4 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Send
+                </button>
+              </div>
+
+              {/* Example Questions */}
+              <div className="mt-4">
+                <p className="text-sm text-gray-600 mb-2">Example questions:</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    "What ingredients are mentioned?",
+                    "How do I cook this recipe?",
+                    "What are the cooking times?",
+                    "Are there any special techniques?"
+                  ].map((question, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setRagInput(question)}
+                      className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                    >
+                      {question}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* MIT License */}
         <div className="mt-12 text-center text-gray-500 text-sm">

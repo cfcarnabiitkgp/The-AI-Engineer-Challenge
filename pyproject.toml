@@ -9,5 +9,13 @@ dependencies = [
     "jupyter>=1.1.1",
     "openai",
     "pydantic>=2.11.4",
+    "together>=1.5.25",
     "uvicorn>=0.34.2",
+    "python-multipart>=0.0.18",
+    "PyPDF2>=3.0.1",
+    "python-dotenv>=1.1.1",
+    "numpy>=1.24.0",
 ]
+
+[tool.setuptools.packages.find]
+include = ["aimakerspace*"]

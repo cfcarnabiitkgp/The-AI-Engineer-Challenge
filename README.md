@@ -7,7 +7,7 @@
 ## <h1 align="center" id="heading"> 🍳 AI Recipe Generator Challenge</h1>
 
 ### 🌐 **Live Demo**
-**[🍳 Try the Recipe Generator Now!](https://arnab-ai-challenge-proble-arnab-bhattacharyas-projects-5392f441.vercel.app/)**
+**[🍳 Try the Recipe Generator Now!](https://arnab-ai-challenge-problem-5yjywderw.vercel.app/)**
 
 ## 🤖 Your First Vibe Coding LLM Application
 
@@ -60,7 +60,7 @@ A sophisticated recipe generator that:
    ```
 
 4. **Visit the app:** 
-   - **Live demo:** [https://arnab-ai-challenge-proble-arnab-bhattacharyas-projects-5392f441.vercel.app/](https://arnab-ai-challenge-proble-arnab-bhattacharyas-projects-5392f441.vercel.app/)
+   - **Live demo:** [https://arnab-ai-challenge-problem-5yjywderw.vercel.app/](https://arnab-ai-challenge-problem-5yjywderw.vercel.app/)
 
 ## 🏗️ **Project Structure**
 
@@ -139,7 +139,7 @@ Post on LinkedIn with this template:
 - Secure API key handling
 
 Check it out 👇
-**[https://arnab-ai-challenge-proble-arnab-bhattacharyas-projects-5392f441.vercel.app/](https://arnab-ai-challenge-proble-arnab-bhattacharyas-projects-5392f441.vercel.app/)**
+**[https://arnab-ai-challenge-problem-5yjywderw.vercel.app/](https://arnab-ai-challenge-problem-5yjywderw.vercel.app/)**
 
 A big shoutout to @AI Makerspace for making this possible! 🤗🙏
 

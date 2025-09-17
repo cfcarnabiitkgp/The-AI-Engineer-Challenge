@@ -28,6 +28,8 @@ After deployment, test these endpoints:
 - **Frontend:** `https://your-app.vercel.app`
 - **Backend Health:** `https://your-app.vercel.app/api/health`
 - **Backend Chat:** `https://your-app.vercel.app/api/chat`
+- **PDF Upload:** `https://your-app.vercel.app/api/upload-pdf`
+- **RAG Chat:** `https://your-app.vercel.app/api/rag-chat`
 
 ## 🔧 Configuration Details
 
@@ -78,6 +80,8 @@ After successful deployment:
 - ✅ Frontend loads at your Vercel URL
 - ✅ Backend responds to `/api/health`
 - ✅ Recipe generation works via `/api/chat`
+- ✅ PDF upload and processing works via `/api/upload-pdf`
+- ✅ RAG chat with PDFs works via `/api/rag-chat`
 - ✅ Real-time streaming functions properly
 
 ## 📞 Need Help?

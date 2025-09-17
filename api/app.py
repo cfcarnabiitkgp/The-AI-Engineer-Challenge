@@ -8,8 +8,12 @@ from pydantic import BaseModel
 from openai import OpenAI
 import os
 import shutil
+import sys
 from pathlib import Path
-from typing import Optional, List, Union, Tuple
+from typing import Optional, List
+
+# Add the parent directory to the Python path to import aimakerspace
+sys.path.append(str(Path(__file__).parent.parent))
 
 # Import aimakerspace components for RAG functionality
 from aimakerspace.text_utils import PDFLoader, CharacterTextSplitter
@@ -34,7 +38,6 @@ vector_db: Optional[VectorDatabase] = None
 chat_model: Optional[ChatOpenAI] = None
 
 # Use /tmp for Vercel serverless functions (read-only file system)
-import tempfile
 pdf_upload_path = Path("/tmp/pdf_data/uploads")
 pdf_processed_path = Path("/tmp/pdf_data/processed")
 
@@ -56,6 +59,25 @@ class RAGChatRequest(BaseModel):
 class UploadResponse(BaseModel):
     message: str
     filename: str
+    status: str
+
+class SuggestedQuestion(BaseModel):
+    question: str
+    category: str
+    confidence: float
+
+class QuestionSuggestionsResponse(BaseModel):
+    questions: List[SuggestedQuestion]
+    content_summary: str
+
+class DeleteResponse(BaseModel):
+    message: str
+    filename: str
+    status: str
+
+class ClearAllResponse(BaseModel):
+    message: str
+    deleted_count: int
     status: str
 
 # Helper functions for RAG functionality
@@ -149,18 +171,205 @@ async def get_relevant_context(query: str, k: int = 5) -> List[str]:
     
     try:
         # Search for relevant chunks
-        relevant_chunks: Union[List[str], List[Tuple[str, float]]] = vector_db.search_by_text(query, k=k, return_as_text=True)
+        relevant_chunks = vector_db.search_by_text(query, k=k, return_as_text=True)
         # Ensure we return List[str] as expected
         if isinstance(relevant_chunks, list) and relevant_chunks:
             if isinstance(relevant_chunks[0], str):
                 return relevant_chunks
             else:
                 # If it's List[Tuple[str, float]], extract just the strings
-                return [chunk[0] for chunk in relevant_chunks if isinstance(chunk, tuple)]
+                return [chunk[0] for chunk in relevant_chunks if isinstance(chunk, tuple) and len(chunk) > 0]
         return []
     except Exception as e:
         print(f"Error retrieving context: {e}")
         return []
+
+async def delete_pdf_from_vector_db(filename: str) -> bool:
+    """Remove PDF content from vector database by filename."""
+    global vector_db
+    
+    if not vector_db:
+        return False
+    
+    try:
+        # Note: This is a simplified approach. In a production system, you'd want
+        # to track which chunks belong to which PDF for more precise deletion.
+        # For now, we'll rebuild the vector database without the deleted PDF.
+        
+        # Get all remaining processed PDFs
+        remaining_pdfs = []
+        for pdf_file in pdf_processed_path.glob("*.pdf"):
+            if pdf_file.name != filename:
+                remaining_pdfs.append(pdf_file)
+        
+        if not remaining_pdfs:
+            # No PDFs left, clear the vector database
+            vector_db = VectorDatabase()
+            return True
+        
+        # Rebuild vector database with remaining PDFs
+        vector_db = VectorDatabase()
+        pdf_loader = PDFLoader(str(pdf_processed_path))
+        documents = pdf_loader.load_documents()
+        
+        if documents:
+            text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+            chunks = text_splitter.split_texts(documents)
+            await vector_db.abuild_from_list(chunks)
+        
+        return True
+        
+    except Exception as e:
+        print(f"Error deleting PDF from vector database: {e}")
+        return False
+
+async def generate_question_suggestions() -> QuestionSuggestionsResponse:
+    """Generate relevant question suggestions based on uploaded PDF content."""
+    global vector_db, chat_model
+    
+    if not vector_db:
+        return QuestionSuggestionsResponse(
+            questions=[],
+            content_summary="No PDFs uploaded yet"
+        )
+    
+    try:
+        # Get comprehensive content from multiple query strategies to ensure we cover all sources
+        query_strategies = [
+            "cooking ingredients recipes food",
+            "meal planning nutrition health", 
+            "shopping list ingredients preparation",
+            "dietary guidelines food safety"
+        ]
+        
+        all_chunks = []
+        for query in query_strategies:
+            chunks = await get_relevant_context(query, k=5)
+            all_chunks.extend(chunks)
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_chunks = []
+        for chunk in all_chunks:
+            if chunk not in seen:
+                seen.add(chunk)
+                unique_chunks.append(chunk)
+        
+        if not unique_chunks:
+            return QuestionSuggestionsResponse(
+                questions=[],
+                content_summary="No content available in uploaded PDFs"
+            )
+        
+        # Generate questions using the chat model
+        if not chat_model:
+            await initialize_rag_system()
+        
+        if not chat_model:
+            raise Exception("Chat model not available")
+        
+        # Generate dynamic questions based on actual PDF content
+        try:
+            # Create a comprehensive prompt that emphasizes cross-source questions
+            content_text = "\n\n".join(unique_chunks[:8])  # Use first 8 chunks for comprehensive coverage
+            
+            prompt = f"""Based on the following content from uploaded documents, generate 8-12 relevant cooking and recipe questions. 
+            IMPORTANT: The questions should demonstrate that you're using information from ALL the sources provided.
+            Make sure questions reference multiple documents and show cross-source connections.
+
+            Content from documents:
+            {content_text}
+
+            Generate questions that:
+            1. Reference ingredients or information from multiple sources
+            2. Show cross-source connections (e.g., "Based on the shopping lists and ingredient guides...")
+            3. Demonstrate comprehensive understanding of all uploaded content
+            4. Cover practical cooking scenarios using the combined information
+            5. Include questions that compare or combine information from different sources
+
+            Categories to cover:
+            - Recipe creation using available ingredients from multiple sources
+            - Cooking techniques and methods across different documents
+            - Meal planning and preparation using combined information
+            - Flavor pairing and seasoning from various guides
+            - Dietary considerations from multiple sources
+            - Time-efficient cooking using all available resources
+
+            Return the questions in this format:
+            Category: [category_name]
+            Question: [question_text that references multiple sources]
+            Confidence: [0.0-1.0]
+
+            Separate each question with a blank line."""
+
+            # Generate questions using the chat model
+            messages = [
+                {"role": "system", "content": "You are a helpful cooking assistant that generates relevant questions based on multiple ingredient lists, shopping lists, and cooking guides. Always create questions that demonstrate understanding of ALL sources and show cross-source connections."},
+                {"role": "user", "content": prompt}
+            ]
+            
+            response = chat_model.run(messages)
+            generated_text = response.strip()
+            
+            # Parse the generated questions
+            questions = []
+            lines = generated_text.split('\n')
+            current_question = {}
+            
+            for line in lines:
+                line = line.strip()
+                if line.startswith('Category:'):
+                    if current_question:
+                        questions.append(SuggestedQuestion(**current_question))
+                    current_question = {'category': line.replace('Category:', '').strip()}
+                elif line.startswith('Question:'):
+                    current_question['question'] = line.replace('Question:', '').strip()
+                elif line.startswith('Confidence:'):
+                    try:
+                        current_question['confidence'] = float(line.replace('Confidence:', '').strip())
+                    except:
+                        current_question['confidence'] = 0.7
+            
+            # Add the last question if it exists
+            if current_question and 'question' in current_question:
+                questions.append(SuggestedQuestion(**current_question))
+            
+            # If we didn't get good questions, fall back to some generic ones
+            if len(questions) < 3:
+                questions = [
+                    SuggestedQuestion(question="What recipes can I make using ingredients from all the uploaded documents?", category="recipe_creation", confidence=0.8),
+                    SuggestedQuestion(question="How can I prepare a balanced meal using items from multiple shopping lists?", category="meal_planning", confidence=0.7),
+                    SuggestedQuestion(question="What cooking techniques work best for the ingredients across all sources?", category="techniques", confidence=0.7),
+                ]
+            
+            # Count unique sources referenced in questions
+            source_count = len(set([chunk.split('\n')[0] for chunk in unique_chunks if chunk.startswith('[SOURCE:')]))
+            
+            return QuestionSuggestionsResponse(
+                questions=questions,
+                content_summary=f"Generated {len(questions)} questions using content from {source_count} uploaded documents"
+            )
+            
+        except Exception as e:
+            print(f"Error generating dynamic questions: {e}")
+            # Fallback to basic questions if AI generation fails
+            fallback_questions = [
+                SuggestedQuestion(question="What recipes can I make using ingredients from all the uploaded documents?", category="recipe_creation", confidence=0.8),
+                SuggestedQuestion(question="How can I prepare a balanced meal using items from multiple shopping lists?", category="meal_planning", confidence=0.7),
+                SuggestedQuestion(question="What cooking techniques work best for the ingredients across all sources?", category="techniques", confidence=0.7),
+            ]
+            
+            return QuestionSuggestionsResponse(
+                questions=fallback_questions,
+                content_summary="Basic questions generated from uploaded document content"
+            )
+        
+    except Exception as e:
+        print(f"Error generating question suggestions: {e}")
+        return QuestionSuggestionsResponse(
+            questions=[],
+            content_summary=f"Error generating suggestions: {str(e)}"
+        )
 
 # Define the main chat endpoint that handles POST requests
 @app.post("/api/chat")
@@ -277,6 +486,7 @@ IMPORTANT RULES:
 RECIPE GENERATION REQUIREMENTS:
 When creating recipes, ALWAYS include:
 - Recipe title
+- Description
 - Prep time and cook time (be specific with minutes)
 - Total time
 - Number of servings
@@ -331,6 +541,93 @@ async def get_uploaded_pdfs():
             })
         
         return {"pdfs": pdf_files}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Delete PDF endpoint
+@app.delete("/api/pdfs/{filename}", response_model=DeleteResponse)
+async def delete_pdf(filename: str):
+    """Delete a PDF file from both storage and vector database."""
+    try:
+        # Check if file exists in processed directory
+        processed_file_path = pdf_processed_path / filename
+        uploaded_file_path = pdf_upload_path / filename
+        
+        file_exists = False
+        file_location = ""
+        
+        if processed_file_path.exists():
+            file_exists = True
+            file_location = "processed"
+        elif uploaded_file_path.exists():
+            file_exists = True
+            file_location = "uploaded"
+        
+        if not file_exists:
+            raise HTTPException(status_code=404, detail=f"PDF '{filename}' not found")
+        
+        # Remove from vector database if it was processed
+        if file_location == "processed":
+            vector_success = await delete_pdf_from_vector_db(filename)
+            if not vector_success:
+                print(f"Warning: Failed to remove {filename} from vector database")
+        
+        # Delete the physical file
+        file_to_delete = processed_file_path if file_location == "processed" else uploaded_file_path
+        file_to_delete.unlink()
+        
+        return DeleteResponse(
+            message=f"PDF '{filename}' deleted successfully from {file_location} directory",
+            filename=filename,
+            status="success"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}") from e
+
+# Clear all PDFs endpoint
+@app.delete("/api/pdfs", response_model=ClearAllResponse)
+async def clear_all_pdfs():
+    """Delete all PDF files from both storage and vector database."""
+    try:
+        deleted_count = 0
+        
+        # Delete all processed PDFs
+        for pdf_file in pdf_processed_path.glob("*.pdf"):
+            pdf_file.unlink()
+            deleted_count += 1
+        
+        # Delete all uploaded PDFs
+        for pdf_file in pdf_upload_path.glob("*.pdf"):
+            pdf_file.unlink()
+            deleted_count += 1
+        
+        # Clear vector database
+        global vector_db
+        vector_db = VectorDatabase()
+        
+        return ClearAllResponse(
+            message=f"Successfully deleted {deleted_count} PDF files and cleared vector database",
+            deleted_count=deleted_count,
+            status="success"
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Clear all failed: {str(e)}") from e
+
+# Get question suggestions endpoint
+@app.get("/api/suggest-questions", response_model=QuestionSuggestionsResponse)
+async def get_question_suggestions():
+    """Get relevant question suggestions based on uploaded PDF content."""
+    try:
+        # Initialize RAG system if not already done
+        if not vector_db or not chat_model:
+            await initialize_rag_system()
+        
+        return await generate_question_suggestions()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

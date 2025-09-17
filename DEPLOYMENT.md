@@ -5,7 +5,7 @@
 The application is now **successfully deployed** to Vercel with both frontend and backend working together! 🎉
 
 ### 🌐 **Live Application**
-**[https://arnab-ai-challenge-problem-5yjywderw.vercel.app/](https://arnab-ai-challenge-problem-5yjywderw.vercel.app/)**
+**[https://arnab-ai-challenge-problem-mqiu00lko.vercel.app/](https://arnab-ai-challenge-problem-mqiu00lko.vercel.app/)**
 
 ## 🏗️ **Current Architecture**
 
@@ -51,20 +51,20 @@ The app uses a **monorepo deployment** on Vercel:
 
 ### Backend Health Check
 ```bash
-curl https://arnab-ai-challenge-problem-5yjywderw.vercel.app/api/health
+curl https://arnab-ai-challenge-problem-mqiu00lko.vercel.app/api/health
 # Expected: {"status":"ok"}
 ```
 
 ### Recipe Generation Test
 ```bash
-curl -X POST "https://arnab-ai-challenge-problem-5yjywderw.vercel.app/api/chat" \
+curl -X POST "https://arnab-ai-challenge-problem-mqiu00lko.vercel.app/api/chat" \
   -H "Content-Type: application/json" \
   -d '{"developer_message": "Generate a recipe", "user_message": "Ingredients: chicken, rice, vegetables\nServings: 4 people\nCooking Time: 30 minutes", "model": "gpt-4.1-mini"}'
 ```
 
 ### PDF Chat Test
 ```bash
-curl -X POST "https://arnab-ai-challenge-problem-5yjywderw.vercel.app/api/rag-chat" \
+curl -X POST "https://arnab-ai-challenge-problem-mqiu00lko.vercel.app/api/rag-chat" \
   -H "Content-Type: application/json" \
   -d '{"user_message": "What ingredients are available?"}'
 ```

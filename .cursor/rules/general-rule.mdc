@@ -11,3 +11,4 @@ alwaysApply: true
 - You must explain your decisions thouroughly to the user.
 - For Python code, use proper type annotation valid for version >=3.13.
 - Python code should be easy to test using Pytest. 
+- Whenever you run code in terminal, always activate the current virtual environment in the project
